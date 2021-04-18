@@ -29,7 +29,8 @@ This tutorial also installs openssl PKCS module which we will use to test.  You 
 - [crypto.Signer, crypto.Decrypter implementations](https://github.com/salrashid123/signer#usage-tls):  Various crypto.Sginer implementations that do not use PKCS11 and instead use native drivers.
 - [Trusted Platform Module (TPM) recipes with tpm2_tools and go-tpm](https://github.com/salrashid123/tpm2): Samples for using TPMs in golang
 - [YubiKeyTokenSource](https://github.com/salrashid123/yubikey): This implements a crypto.Signer for a yubikey by using yubikey APIs directly (not via PKCS11)!
-
+- [Sample CA for mTLS](https://github.com/salrashid123/ca_scratchpad)
+- [OpenSSL docker with TLS trace enabled (enable-ssl-trace)](https://github.com/salrashid123/openssl_trace)
 
 Anyway, lets get started..
 
@@ -75,8 +76,6 @@ dynamic_path = /usr/lib/x86_64-linux-gnu/engines-1.1/libpkcs11.so
 ```
 
 ```bash
-openssl engine -t -c pkcs11
-
 $ ls /usr/lib/x86_64-linux-gnu/engines-1.1/
 afalg.so  libpkcs11.so  padlock.so  pkcs11.la  pkcs11.so
 
@@ -145,7 +144,7 @@ openssl engine dynamic \
 Use [pkcs11-too](https://manpages.debian.org/testing/opensc/pkcs11-tool.1.en.html) which comes with the installation of opensc
 
 ```bash
-export SOFTHSM2_CONF=/absolute/path/to/softhsm.conf
+export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
 
 ## init softhsm
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --slot-index=0 --init-token --label="token1" --so-pin="123456"
@@ -205,16 +204,16 @@ cd ca_scratchpad
 
 follow the three steps as described in `ca_scratchpad/README.md`:  
 
-Create Root CA
-Gen CRL
-Create Subordinate CA for TLS Signing
+- Create Root CA
+- Gen CRL
+- Create Subordinate CA for TLS Signing
 
 stop after setting up the CA
 
 Now that the CA is setup, we need to create a CSR using the private key in the SoftHSM
 
 ```bash
-export SOFTHSM2_CONF=/absolute/path/to/softhsm.conf
+export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
 cd csr/
 
 ## you will see the CSR based on the private key in SoftHSM (your cert will be different!)
@@ -312,7 +311,7 @@ import (
 ...
 ...
 
-	// export SOFTHSM2_CONF=/absolute/path/to/softhsm.conf
+	// export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
 	config := &crypto11.Config{
 		Path:       "/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so",
 		TokenLabel: "token1",
@@ -346,13 +345,13 @@ Note, we are specifying the `PublicCertFile` directly...hardware like YubiKeys c
 
 Run Server
 ```bash
-export SOFTHSM2_CONF=/absolute/path/to/softhsm.conf
+export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
 go run server/server.go
 ```
 
 Run Client
 ```bash
-export SOFTHSM2_CONF=/absolute/path/to/softhsm.conf
+export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
 go run client/client.go
 ```
 
@@ -361,7 +360,7 @@ go run client/client.go
 To use curl for client certs, you can use the `--engine` directive and specify that the private key referenced to by the `PKCS11_PRIVATE_KEY` uri
 
 ```bash
-export SOFTHSM2_CONF=/absolute/path/to/softhsm.conf
+export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
 export PKCS11_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=11819f2dd1b9d639;token=token1;type=private;object=keylabel1?pin-value=mynewpin"
 export PKCS11_PUBLIC_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=11819f2dd1b9d639;token=token1;type=public;object=keylabel1?pin-value=mynewpin"
 
