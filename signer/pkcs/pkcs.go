@@ -33,7 +33,7 @@ type PKCS struct {
 	PkcsLabel      []byte
 	Context        *crypto11.Context
 
-	refreshMutex sync.Mutex
+	refreshMutex *sync.Mutex
 }
 
 func NewPKCSCrypto(conf *PKCS) (PKCS, error) {
@@ -82,14 +82,28 @@ func NewPKCSCrypto(conf *PKCS) (PKCS, error) {
 		}
 
 	}
-	return *conf, nil
+
+	return PKCS{
+		refreshMutex: &sync.Mutex{}, // guards impersonatedToken; held while fetching or updating it.
+		priv:         conf.priv,
+		ExtTLSConfig: conf.ExtTLSConfig,
+		pcert:        conf.pcert,
+		PkcsId:       conf.PkcsId,
+		PkcsLabel:    conf.PkcsLabel,
+		Context:      conf.Context,
+	}, nil
+
 }
 
 func (t PKCS) Public() crypto.PublicKey {
+	t.refreshMutex.Lock()
+	defer t.refreshMutex.Unlock()
 	return t.priv.Public()
 }
 
 func (t PKCS) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	t.refreshMutex.Lock()
+	defer t.refreshMutex.Unlock()
 	return t.priv.Sign(rand, digest, opts)
 }
 

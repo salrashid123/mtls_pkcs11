@@ -306,6 +306,12 @@ First to setup and use this library, we will need to configure the PKCS provider
 For softHSM Server:
 
 ```golang
+import (
+  salpkcs "github.com/salrashid123/mtls_pkcs11/signer/pkcs"
+)
+...
+...
+
 	// export SOFTHSM2_CONF=/absolute/path/to/softhsm.conf
 	config := &crypto11.Config{
 		Path:       "/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so",
