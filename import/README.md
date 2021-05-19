@@ -13,7 +13,7 @@ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --list-mec
 
 ## Wrapping RSA key with AES key
 
-see `aes_rsa/import.go`:
+see `rsa_aes/import.go`:
 
 In this mode, we will:
 
@@ -129,7 +129,7 @@ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --list-ob
 In this mode, we will do the inverse where we generate and AES key which we will wrap/unwrap with RSA key
 
 
-see `rsa_aes/import.go`:
+see `aes_rsa/import.go`:
 
 
 1. First create AES key suitable with `CKA_EXTRACTABLE`
