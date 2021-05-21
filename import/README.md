@@ -212,6 +212,20 @@ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --list-ob
 ```
 
 
+
+
+
+## Wrapping RSA key with RSA key
+
+>> i do not think ths is supported
+
+`CKR_KEY_NOT_WRAPPABLE`:  
+
+```golang
+CKR_KEY_NOT_WRAPPABLE 
+ "CKM_RSA_PKCS and CKM_RSA_PKCS_OAEP can be used only on SECRET keys: PKCS#11 2.40 draft 2 section 2.1.6 PKCS #1 v1.5 RSA & section 2.1.8 PKCS #1 RSA OAEP"
+```
+
 ## Importing RSA Cert and Key using pkcs11-tool
 
 ```bash
@@ -242,23 +256,6 @@ pkcs11-tool  --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --pin myn
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --list-token-slots
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --list-objects --pin mynewpin
 ```
-
-
-## Wrapping RSA key with RSA key
-
->> note, this mode does not work yet
-
-i don't really understand why yet
-
-`CKR_KEY_NOT_WRAPPABLE`:  
-
-```golang
-CKR_KEY_NOT_WRAPPABLE 
- "CKM_RSA_PKCS and CKM_RSA_PKCS_OAEP can be used only on SECRET keys: PKCS#11 2.40 draft 2 section 2.1.6 PKCS #1 v1.5 RSA & section 2.1.8 PKCS #1 RSA OAEP"
-```
-
-- [http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/os/pkcs11-curr-v2.40-os.html#_Toc416959973](http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/os/pkcs11-curr-v2.40-os.html#_Toc416959973)
-
 
 ### References
 
