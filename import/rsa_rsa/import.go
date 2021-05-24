@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
@@ -70,36 +69,49 @@ func main() {
 	if err != nil {
 		fmt.Println("binary.Write failed:", err)
 	}
-	id := buf.Bytes()
+	wpubID := buf.Bytes()
 
-	aesKeyTemplate := []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_SECRET_KEY),
-		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_AES),
-		pkcs11.NewAttribute(pkcs11.CKA_ENCRYPT, true),
-		pkcs11.NewAttribute(pkcs11.CKA_DECRYPT, true),
-		pkcs11.NewAttribute(pkcs11.CKA_WRAP, true),
-		pkcs11.NewAttribute(pkcs11.CKA_UNWRAP, true),
-		pkcs11.NewAttribute(pkcs11.CKA_VERIFY, false),
-		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
-		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, true),
-		pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, false), // we don't need to extract this..
-		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
-		pkcs11.NewAttribute(pkcs11.CKA_VALUE, make([]byte, 32)), /* KeyLength */
-		pkcs11.NewAttribute(pkcs11.CKA_LABEL, "WrappingAESKey"), /* Name of Key */
-		pkcs11.NewAttribute(pkcs11.CKA_ID, id),
-	}
-
-	aesKey, err := p.CreateObject(session, aesKeyTemplate)
+	buf = new(bytes.Buffer)
+	num = 2
+	err = binary.Write(buf, binary.LittleEndian, num)
 	if err != nil {
-		panic(fmt.Sprintf("GenerateKey() failed %s\n", err))
+		log.Fatalf("binary.Write failed: %v", err)
+	}
+	wprivID := buf.Bytes()
+
+	wpublicKeyTemplate := []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
+		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
+		pkcs11.NewAttribute(pkcs11.CKA_VERIFY, true),
+		pkcs11.NewAttribute(pkcs11.CKA_WRAP, true),
+		pkcs11.NewAttribute(pkcs11.CKA_MODULUS_BITS, 2048),
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, "WrappingRSAPublicKey"),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, wpubID),
+	}
+	wprivateKeyTemplate := []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
+		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
+		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
+		pkcs11.NewAttribute(pkcs11.CKA_UNWRAP, true),
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, "WrappingRSAPrivateKey"),
+		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
+		pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, false),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, wprivID),
 	}
 
-	log.Printf("Created AES Key: %v", aesKey)
+	wpbk, wpvk, err := p.GenerateKeyPair(session,
+		[]*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS_KEY_PAIR_GEN, nil)},
+		wpublicKeyTemplate, wprivateKeyTemplate)
+	if err != nil {
+		log.Fatalf("failed to generate exportable keypair: %s\n", err)
+	}
 
 	ktemplate := []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_SECRET_KEY),
-		pkcs11.NewAttribute(pkcs11.CKA_ID, id),
-		pkcs11.NewAttribute(pkcs11.CKA_LABEL, "WrappingAESKey"),
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_ID, wpubID),
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, "WrappingRSAPublicKey"),
 	}
 	if err := p.FindObjectsInit(session, ktemplate); err != nil {
 		panic(err)
@@ -112,41 +124,27 @@ func main() {
 		panic(err)
 	}
 
-	iv := make([]byte, 16)
-	_, err = rand.Read(iv)
-
+	pr, err := p.GetAttributeValue(session, kobjs[0], []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_MODULUS, nil),
+		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, nil),
+	})
 	if err != nil {
 		panic(err)
 	}
 
-	err = p.EncryptInit(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_AES_CBC_PAD, iv)}, kobjs[0])
-	if err != nil {
-		panic(fmt.Sprintf("EncryptInit() failed %s\n", err))
+	modulus := new(big.Int)
+	modulus.SetBytes(pr[0].Value)
+	bigExponent := new(big.Int)
+	bigExponent.SetBytes(pr[1].Value)
+	exponent := int(bigExponent.Uint64())
+
+	rsaPub := &rsa.PublicKey{
+		N: modulus,
+		E: exponent,
 	}
 
-	ct, err := p.Encrypt(session, []byte("foo"))
-	if err != nil {
-		panic(fmt.Sprintf("Encrypt() failed %s\n", err))
-	}
-
-	// append the IV to the ciphertext
-	cdWithIV := append(iv, ct...)
-
-	log.Printf("Encrypted IV+Ciphertext %s", base64.RawStdEncoding.EncodeToString(cdWithIV))
-
-	aesKey = kobjs[0]
-
-	err = p.DecryptInit(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_AES_CBC_PAD, cdWithIV[0:16])}, aesKey)
-	if err != nil {
-		panic(fmt.Sprintf("EncryptInit() failed %s\n", err))
-	}
-
-	pt, err := p.Decrypt(session, ct[:16])
-	if err != nil {
-		panic(fmt.Sprintf("Encrypt() failed %s\n", err))
-	}
-
-	log.Printf("Decrypt %s", string(pt))
+	pubkeyPem := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(rsaPub)}))
+	log.Printf("  Wrapping Public Key: \n%s\n", pubkeyPem)
 
 	/// 3 Create Public/Private Key to transfer back using wrapping key
 	//   Note the following would happen on the remote HSM that would have loaded the wrapping public key
@@ -187,7 +185,7 @@ func main() {
 		pkcs11.NewAttribute(pkcs11.CKA_LABEL, "priv1"),
 		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, true),
 		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
-		pkcs11.NewAttribute(pkcs11.CKA_WRAP_WITH_TRUSTED, false),
+		pkcs11.NewAttribute(pkcs11.CKA_WRAP_WITH_TRUSTED, true),
 		pkcs11.NewAttribute(pkcs11.CKA_UNWRAP, false),
 		pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, true),
 		pkcs11.NewAttribute(pkcs11.CKA_ID, privID),
@@ -202,7 +200,7 @@ func main() {
 
 	// Create a test signature and verify with keypair
 
-	pr, err := p.GetAttributeValue(session, pbk, []*pkcs11.Attribute{
+	pr, err = p.GetAttributeValue(session, pbk, []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_MODULUS, nil),
 		pkcs11.NewAttribute(pkcs11.CKA_PUBLIC_EXPONENT, nil),
 	})
@@ -210,18 +208,18 @@ func main() {
 		panic(err)
 	}
 
-	modulus := new(big.Int)
+	modulus = new(big.Int)
 	modulus.SetBytes(pr[0].Value)
-	bigExponent := new(big.Int)
+	bigExponent = new(big.Int)
 	bigExponent.SetBytes(pr[1].Value)
-	exponent := int(bigExponent.Uint64())
+	exponent = int(bigExponent.Uint64())
 
-	rsaPub := &rsa.PublicKey{
+	rsaPub = &rsa.PublicKey{
 		N: modulus,
 		E: exponent,
 	}
 
-	pubkeyPem := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(rsaPub)}))
+	pubkeyPem = string(pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(rsaPub)}))
 	log.Printf("  Public Key: \n%s\n", pubkeyPem)
 
 	msg := []byte("foo")
@@ -253,7 +251,11 @@ func main() {
 	//  4.  Now wrap the new key with the wrapping public key
 
 	// A) wrap RSA private key using AES wrapping key
-	wrappedPrivBytes, err := p.WrapKey(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_AES_KEY_WRAP, nil)}, aesKey, pvk)
+	//  CKR_KEY_NOT_WRAPPABLE https://github.com/intel/crypto-api-toolkit/blob/master/src/p11/trusted/SoftHSMv2/SoftHSM.cpp#L7436
+	// CKM_RSA_PKCS and CKM_RSA_PKCS_OAEP can be used only on SECRET keys: PKCS#11 2.40 draft 2 section 2.1.6 PKCS #1 v1.5 RSA & section 2.1.8 PKCS #1 RSA OAEP"
+	//  http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/os/pkcs11-curr-v2.40-os.html#_Toc416959973
+
+	wrappedPrivBytes, err := p.WrapKey(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_AES_KEY_WRAP, nil)}, wpbk, pvk)
 
 	if err != nil {
 		log.Fatalf("failed to wrap privatekey : %s\n", err)
@@ -273,22 +275,18 @@ func main() {
 		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
 		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
 		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
-		pkcs11.NewAttribute(pkcs11.CKA_LABEL, "UnwrappedRSAKey"),
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, "ipriv1"),
 		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
 		pkcs11.NewAttribute(pkcs11.CKA_UNWRAP, false),
 		pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, false),
 		pkcs11.NewAttribute(pkcs11.CKA_ID, importedPrivID),
 	}
-	aesKeyTemplate = []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_SECRET_KEY),
-		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_AES),
-		pkcs11.NewAttribute(pkcs11.CKA_TOKEN, true),
-		pkcs11.NewAttribute(pkcs11.CKA_LABEL, "My Second AES Key"), /* Name of Key */
-		pkcs11.NewAttribute(pkcs11.CKA_ID, importedPrivID),
-	}
 
 	// A) unwrap RSA private key using AES key
-	ik, err := p.UnwrapKey(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_AES_KEY_WRAP, nil)}, aesKey, wrappedPrivBytes, importedPrivateKeyTemplate)
+	ik, err := p.UnwrapKey(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_AES_KEY_WRAP, nil)}, wpvk, wrappedPrivBytes, importedPrivateKeyTemplate)
+
+	// B) unwrap AES key using RSA Public Wrapping Key
+	//ik, err := p.UnwrapKey(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)}, wpvk, wrappedPrivBytes, aesKeyTemplate)
 
 	if err != nil {
 		log.Fatalf("Unwrap Failed: %v", err)

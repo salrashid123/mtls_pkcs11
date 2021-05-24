@@ -275,20 +275,17 @@ func main() {
 		log.Fatalf("Unwrap Failed: %v", err)
 	}
 
-	msg := []byte("foo")
-	fmt.Printf("Signing %d bytes with %s\n", len(msg), msg)
-	err = p.SignInit(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_SHA256_RSA_PKCS, nil)}, ik)
+	// use unwraped key to decrypt the same data we did at the beginning
+	err = p.DecryptInit(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_AES_CBC_PAD, cdWithIV[0:16])}, ik)
 	if err != nil {
-		log.Fatalf("Signing Initiation failed (%s)\n", err.Error())
+		panic(fmt.Sprintf("EncryptInit() failed %s\n", err))
 	}
 
-	// Sign 'msg'
-	sig, err := p.Sign(session, msg)
+	pt, err = p.Decrypt(session, ct[:16])
 	if err != nil {
-		err = fmt.Errorf("signing failed (%s)\n", err.Error())
-		return
+		panic(fmt.Sprintf("Encrypt() failed %s\n", err))
 	}
 
-	log.Printf("Signature %s", base64.RawStdEncoding.EncodeToString(sig))
+	log.Printf("Decrypt %s", string(pt))
 
 }

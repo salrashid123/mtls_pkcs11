@@ -7,7 +7,7 @@ Examples on how to wrap and unwrap an AES and RSA keys into softHSM
 ```bash
 export SOFTHSM2_CONF=/path/to/mtls_pkcs11/misc/softhsm.conf
 
-# list uspported mechanisms
+# list supported mechanisms
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --list-mechanisms --slot-index 0
 ```
 
@@ -217,14 +217,99 @@ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --list-ob
 
 ## Wrapping RSA key with RSA key
 
->> i do not think ths is supported
 
-`CKR_KEY_NOT_WRAPPABLE`:  
+Ref:
+-- [2.1.21 RSA AES KEY WRAP](http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/errata01/os/pkcs11-curr-v2.40-errata01-os-complete.html#_Toc441850425)
 
-```golang
-CKR_KEY_NOT_WRAPPABLE 
- "CKM_RSA_PKCS and CKM_RSA_PKCS_OAEP can be used only on SECRET keys: PKCS#11 2.40 draft 2 section 2.1.6 PKCS #1 v1.5 RSA & section 2.1.8 PKCS #1 RSA OAEP"
 ```
+2.1.21 RSA AES KEY WRAP
+
+The RSA AES key wrap mechanism, denoted CKM_RSA_AES_KEY_WRAP , is a mechanism based on the RSA public-key cryptosystem and the AES key wrap mechanism.  It supports single-part key wrapping; and key unwrapping.
+
+It has a parameter, a CK_RSA_AES_KEY_WRAP_PARAMS structure.
+
+The mechanism can wrap and unwrap a target asymmetric key of any length and type using an RSA key.
+```
+
+>> i do not think ths is supported with softHSM [Issue#424](https://github.com/opendnssec/SoftHSMv2/issues/424)
+
+```bash
+# softHSM
+$ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --list-mechanisms
+	Using slot 0 with a present token (0x5a975eb5)
+	RSA-PKCS, keySize={512,16384}, encrypt, decrypt, sign, verify, wrap, unwrap
+	RSA-PKCS-KEY-PAIR-GEN, keySize={512,16384}, generate_key_pair
+	RSA-PKCS-OAEP, keySize={512,16384}, encrypt, decrypt, wrap, unwrap
+	RSA-PKCS-PSS, keySize={512,16384}, sign, verify
+	RSA-X-509, keySize={512,16384}, encrypt, decrypt, sign, verify
+
+	AES-KEY-WRAP, keySize={16,2147483648}, wrap, unwrap
+
+# Yubikey
+$ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/opensc-pkcs11.so  --list-mechanisms | grep RSA
+	Using slot 0 with a present token (0x0)
+	RSA-X-509, keySize={1024,3072}, hw, decrypt, sign, verify
+	RSA-PKCS, keySize={1024,3072}, hw, decrypt, sign, verify
+	SHA1-RSA-PKCS, keySize={1024,3072}, sign, verify
+	SHA224-RSA-PKCS, keySize={1024,3072}, sign, verify
+	SHA256-RSA-PKCS, keySize={1024,3072}, sign, verify
+	SHA384-RSA-PKCS, keySize={1024,3072}, sign, verify
+	SHA512-RSA-PKCS, keySize={1024,3072}, sign, verify
+	MD5-RSA-PKCS, keySize={1024,3072}, sign, verify
+	RIPEMD160-RSA-PKCS, keySize={1024,3072}, sign, verify
+	RSA-PKCS-PSS, keySize={1024,3072}, hw, sign, verify
+	SHA1-RSA-PKCS-PSS, keySize={1024,3072}, sign, verify
+	SHA224-RSA-PKCS-PSS, keySize={1024,3072}, sign, verify
+	SHA256-RSA-PKCS-PSS, keySize={1024,3072}, sign, verify
+	SHA384-RSA-PKCS-PSS, keySize={1024,3072}, sign, verify
+	SHA512-RSA-PKCS-PSS, keySize={1024,3072}, sign, verify
+
+$  pkcs11-tool --module /usr/lib/x86_64-linux-gnu/opensc-pkcs11.so  --list-mechanisms | grep WRAP
+	Using slot 0 with a present token (0x0)
+
+# TPM
+$ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/libtpm2_pkcs11.so.1 --list-mechanisms
+	Using slot 0 with a present token (0x1)
+	Supported mechanisms:
+	RSA-PKCS-KEY-PAIR-GEN, keySize={1024,2048}, hw, generate_key_pair
+	RSA-X-509, keySize={1024,2048}, hw, encrypt, decrypt, sign, verify
+	RSA-PKCS, keySize={1024,2048}, hw, encrypt, decrypt, sign, verify
+	RSA-PKCS-OAEP, keySize={1024,2048}, hw, encrypt, decrypt
+	SHA1-RSA-PKCS, keySize={1024,2048}, hw, sign, verify
+	SHA256-RSA-PKCS, keySize={1024,2048}, hw, sign, verify
+	SHA384-RSA-PKCS, keySize={1024,2048}, hw, sign, verify
+	ECDSA-KEY-PAIR-GEN, keySize={224,521}, hw, generate_key_pair
+	ECDSA, keySize={224,521}, hw, sign, verify
+	ECDSA-SHA1, keySize={224,521}, hw, sign, verify
+	AES-KEY-GEN, keySize={16,32}, hw, generate
+	AES-CBC, keySize={16,32}, hw, encrypt, decrypt
+	mechtype-0x2107, keySize={16,32}, hw, encrypt, decrypt
+	AES-ECB, keySize={16,32}, hw, encrypt, decrypt
+	SHA-1, digest
+	SHA256, digest
+	SHA384, digest
+	SHA512, digest
+```
+
+Instead, i **think** the procedure to transfer an RSA private key from HSM_A to HSM_B goes like this using (`aes_rsa/import.go` and `rsa_aes/import.go`):
+
+1. Generate an RSA keypair on HSM_B (`HSM_B_RSA_PUB_W`, `HSM_B_RSA_PRIV_W`) capable of wrapping
+2. Export the public RSA wrapping key (`HSM_B_RSA_PUB_W`)
+3. Provide the Public RSA wrapping key (`HSM_B_RSA_PUB_W`) to HSM_A
+4. HSM_A imports `HSM_B_RSA_PUB_W`
+5. HSM_A generates AES key  (`HSM_A_AES_W`) capable of wrapping
+6. HSM_A wraps `HSM_A_AES_W` with `HSM_B_RSA_PUB_W`
+7. HSM_A transfers wrapped `HSM_A_AES_W` to HSM_B
+8. HSM_B imports `HSM_A_AES_W`
+9. HSM_A generates keypair (`HSM_A_RSA_PUB`, `HSM_A_RSA_PRIV`)
+10. HSM_A wraps (`HSM_A_RSA_PUB`, `HSM_A_RSA_PRIV`) with (`HSM_A_AES_W`)
+11. HSM_A transfers wrapped RSA keys from to HSM_B
+12. HSM_B uses imported (`HSM_A_AES_W`) from step 8 to unwrap the transferred keys.
+
+<< do not do this...i'm unsure if this is the correct protocol!
+
+
+also see [Importing a manually-wrapped key](https://cloud.google.com/kms/docs/importing-a-key#importing_a_manually-wrapped_key). 
 
 ## Importing RSA Cert and Key using pkcs11-tool
 
