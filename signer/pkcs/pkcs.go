@@ -120,6 +120,16 @@ func (t PKCS) TLSCertificate() tls.Certificate {
 }
 
 func (t PKCS) TLSConfig() *tls.Config {
-	t.ExtTLSConfig.Certificates = []tls.Certificate{t.TLSCertificate()}
-	return t.ExtTLSConfig
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{t.TLSCertificate()},
+
+		RootCAs:      t.ExtTLSConfig.RootCAs,
+		ClientCAs:    t.ExtTLSConfig.ClientCAs,
+		ClientAuth:   t.ExtTLSConfig.ClientAuth,
+		ServerName:   t.ExtTLSConfig.ServerName,
+		CipherSuites: t.ExtTLSConfig.CipherSuites,
+		MaxVersion:   t.ExtTLSConfig.MaxVersion,
+		MinVersion:   t.ExtTLSConfig.MinVersion,
+	}
 }

@@ -61,7 +61,16 @@ Once installed, you can check that it can be loaded:
 
 Set the pkcs11 provider and module directly into openssl (make sure `libpkcs11.so` engine reference exists first!)
 
-- `/etc/ssl/openssl.cnf`
+
+Verify the path,
+
+```bash
+$ ls /usr/lib/x86_64-linux-gnu/engines-3/
+## or
+$ ls /usr/lib/x86_64-linux-gnu/engines-1.1/
+
+
+edit `/etc/ssl/openssl.cnf`
 ```bash
 openssl_conf = openssl_def
 [openssl_def]
@@ -72,13 +81,11 @@ pkcs11 = pkcs11_section
 
 [pkcs11_section]
 engine_id = pkcs11
-dynamic_path = /usr/lib/x86_64-linux-gnu/engines-1.1/libpkcs11.so
+dynamic_path = /usr/lib/x86_64-linux-gnu/engines-3/libpkcs11.so
 ```
 
-```bash
-$ ls /usr/lib/x86_64-linux-gnu/engines-1.1/
-afalg.so  libpkcs11.so  padlock.so  pkcs11.la  pkcs11.so
 
+```bash
 $ openssl engine
   (rdrand) Intel RDRAND engine
   (dynamic) Dynamic engine loading support
@@ -87,8 +94,6 @@ $ openssl engine -t -c pkcs11
   (pkcs11) pkcs11 engine
   [RSA, rsaEncryption, id-ecPublicKey]
       [ available ]
-
-      dynamic_path = /usr/lib/x86_64-linux-gnu/engines-1.1/libpkcs11.so
 ```
 
 ---
@@ -105,54 +110,35 @@ Setup a config file where the `directories.tokendir` points to a existing folder
 
 >> This repo already contains a sample configuration/certs to use with the softhsm token directory...just delete the folder and start from scratch if you want..
 
-```bash
-cd misc
-mkdir tokens
-```
-
-Edit `misc/softhsm.conf`
-and edit the value for `directories.tokendir`
-
-```bash
-log.level = DEBUG
-objectstore.backend = file
-directories.tokendir = /absolute/path/to/pkcs11_signer/misc/tokens/
-slots.removable = true
-```
-
 Now, make sure that the installation created the softhsm module for openssl:  `/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so`
 
 ```bash
 openssl engine dynamic \
- -pre SO_PATH:/usr/lib/x86_64-linux-gnu/engines-1.1/libpkcs11.so \
+ -pre SO_PATH:/usr/lib/x86_64-linux-gnu/engines-3/libpkcs11.so \
  -pre ID:pkcs11 -pre LIST_ADD:1 \
  -pre LOAD \
  -pre MODULE_PATH:/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so \
  -t -c
 
   (dynamic) Dynamic engine loading support
-  [Success]: SO_PATH:/usr/lib/x86_64-linux-gnu/engines-1.1/libpkcs11.so
+  [Success]: SO_PATH:/usr/lib/x86_64-linux-gnu/engines-3/libpkcs11.so
   [Success]: ID:pkcs11
   [Success]: LIST_ADD:1
   [Success]: LOAD
   [Success]: MODULE_PATH:/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so
   Loaded: (pkcs11) pkcs11 engine
   [RSA, rsaEncryption, id-ecPublicKey]
-      [ available ] 
+      [ available ]
 ```
 
 Use [pkcs11-too](https://manpages.debian.org/testing/opensc/pkcs11-tool.1.en.html) which comes with the installation of opensc
 
 ```bash
 export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
-
-## init softhsm
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --slot-index=0 --init-token --label="token1" --so-pin="123456"
-
-## Change pin and list token slots
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --label="token1" --init-pin --so-pin "123456" --pin mynewpin
 
-$ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --list-token-slots
+pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --list-token-slots
         Available slots:
         Slot 0 (0x51b9d639): SoftHSM slot ID 0x51b9d639
         token label        : token1
@@ -164,10 +150,13 @@ $ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --list-t
         serial num         : 11819f2dd1b9d639
         pin min/max        : 4/255
 
+
+### >>> NOTE the serial num   48270b7e02cb2764
+
 # Create object
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so -l -k --key-type rsa:2048 --id 4142 --label keylabel1 --pin mynewpin
 
-$ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --list-objects
+pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --list-objects
         Using slot 0 with a present token (0x51b9d639)
         Public Key Object; RSA 2048 bits
         label:      keylabel1
@@ -180,8 +169,8 @@ $ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --list-
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --label="keylabel1" --pin mynewpin --generate-random 50 | xxd -p
 
 ### Use openssl module to sign and print the public key (not, your serial number will be different)
-export PKCS11_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=11819f2dd1b9d639;token=token1;type=private;object=keylabel1?pin-value=mynewpin"
-export PKCS11_PUBLIC_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=11819f2dd1b9d639;token=token1;type=public;object=keylabel1?pin-value=mynewpin"
+export PKCS11_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=48270b7e02cb2764;token=token1;type=private;object=keylabel1?pin-value=mynewpin"
+export PKCS11_PUBLIC_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=48270b7e02cb2764;token=token1;type=public;object=keylabel1?pin-value=mynewpin"
 
 ### Sign and verify
 echo "sig data" > "data.txt"
@@ -197,12 +186,7 @@ openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_PUBLIC_KEY" -pubout
 
 At this point, we can use the embedded private keys to generate x509 certificate CSRs. Note: devices can already generate x509 certs associated with  its private key but in this case, we will use an externally generated CA using the private key alone
 
-```bash
-git clone https://github.com/salrashid123/ca_scratchpad
-cd ca_scratchpad
-```
-
-follow the three steps as described in `ca_scratchpad/README.md`:  
+follow the three steps as described in `ca_scratchpad/README.md` (eg [ca_scratchpad](https://github.com/salrashid123/ca_scratchpad)):  
 
 - Create Root CA
 - Gen CRL
@@ -214,7 +198,6 @@ Now that the CA is setup, we need to create a CSR using the private key in the S
 
 ```bash
 export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
-cd csr/
 
 ## you will see the CSR based on the private key in SoftHSM (your cert will be different!)
 $ go run csr/csr.go 
@@ -238,36 +221,39 @@ jwPri7o275SdaSxZ7CmawSaeL0S33NJfHGAy5IeXngM=
 -----END CERTIFICATE REQUEST-----
 ```
 
-copy paste theCSR into files called 
+copy paste the CSR into files called 
 
-* `ca_cratchpad/certs/softhsm-server.csr`
-* `ca_cratchpad/certs/softhsm-client.csr`
+* `ca_scratchpad/certs/softhsm-server.csr`
+* `ca_scratchpad/certs/softhsm-client.csr`
   (yes, we're going to use the same csr for both end just to test for simplicity)
 
 Generate Certs
 ```bash
-cd ca_scratchpad
+cd ca_scratchpad/
+
 export NAME=softhsm-server
 export SAN=DNS:pkcs.domain.com
+
 openssl ca \
-    -config tls-ca.conf \
+    -config single-root-ca.conf \
     -in certs/$NAME.csr \
     -out certs/$NAME.crt \
-    -extensions server_ext
+    -extensions server_ext  
 
 
+## generate client cert
 export NAME=softhsm-client
 export SAN=DNS:pkcs.domain.com
 
 openssl ca \
-    -config tls-ca.conf \
+    -config single-root-ca.conf \
     -in certs/$NAME.csr \
     -out certs/$NAME.crt \
     -policy extern_pol \
     -extensions client_ext
 ```
 
-You can also directly use openssl to create the CSR and then embed the cert into the HSM:
+Alternatively, you can also directly use openssl to create the CSR and then embed the cert into the HSM:
 
 ```bash
 export PKCS11_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=11819f2dd1b9d639;token=token1;type=private;object=keylabel1?pin-value=mynewpin"
@@ -318,7 +304,7 @@ import (
 		Pin:        "mynewpin",
 	}
   ctx, err := crypto11.Configure(config)
-	clientCaCert, err := ioutil.ReadFile("ca_scratchpad/ca/tls-ca-chain.pem")
+	clientCaCert, err := ioutil.ReadFile("ca_scratchpad/ca/root-ca.crt")
 	clientCaCertPool := x509.NewCertPool()
 	clientCaCertPool.AppendCertsFromPEM(clientCaCert)
 
@@ -364,7 +350,7 @@ export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
 export PKCS11_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=11819f2dd1b9d639;token=token1;type=private;object=keylabel1?pin-value=mynewpin"
 export PKCS11_PUBLIC_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=11819f2dd1b9d639;token=token1;type=public;object=keylabel1?pin-value=mynewpin"
 
-curl -vvv -tls13  --cacert ca_scratchpad/ca/tls-ca-chain.pem \
+curl -vvv -tls13  --cacert ca_scratchpad/ca/root-ca.crt \
    --cert ca_scratchpad/certs/softhsm-client.crt  --engine pkcs11  --key-type ENG --key "$PKCS11_PUBLIC_KEY"  \
    --resolve pkcs.domain.com:8081:127.0.0.1   -H "host: pkcs.domain.com" \
          https://pkcs.domain.com:8081/

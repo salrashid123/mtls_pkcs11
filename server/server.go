@@ -59,7 +59,7 @@ func main() {
 
 	defer ctx.Close()
 
-	clientCaCert, err := ioutil.ReadFile("ca_scratchpad/ca/tls-ca-chain.pem")
+	clientCaCert, err := ioutil.ReadFile("ca_scratchpad/ca/root-ca.crt")
 	clientCaCertPool := x509.NewCertPool()
 	clientCaCertPool.AppendCertsFromPEM(clientCaCert)
 
