@@ -8,16 +8,24 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"flag"
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/ThalesIgnite/crypto11"
 )
 
-var ()
+var (
+	servercsrfile = flag.String("servercsrfile", "ca_scratchpad/certs/softhsm-server.csr", "Arbitrary config file")
+	clientcsrfile = flag.String("clientcsrfile", "ca_scratchpad/certs/softhsm-client.csr", "Arbitrary config file")
+)
 
 const ()
 
 func main() {
+	flag.Parse()
+
 	// var slotNum *int
 	// slotNum = new(int)
 	// *slotNum = 0
@@ -106,6 +114,7 @@ func main() {
 	// **************************
 	/// Generate CSR
 	var csrtemplate = x509.CertificateRequest{
+		SignatureAlgorithm: x509.SHA256WithRSA,
 		Subject: pkix.Name{
 			Organization:       []string{"Google"},
 			OrganizationalUnit: []string{"Enterprise"},
@@ -130,4 +139,28 @@ func main() {
 	)
 	log.Printf("CSR \n%s\n", string(pemdata))
 
+	f1, err := os.Create(*servercsrfile)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	_, err = f1.WriteString(string(pemdata))
+	if err != nil {
+		fmt.Println(err)
+		f1.Close()
+		return
+	}
+	defer f1.Close()
+	f2, err := os.Create(*clientcsrfile)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	_, err = f2.WriteString(string(pemdata))
+	if err != nil {
+		fmt.Println(err)
+		f2.Close()
+		return
+	}
+	defer f2.Close()
 }
