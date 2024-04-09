@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	servercsrfile = flag.String("servercsrfile", "ca_scratchpad/certs/softhsm-server.csr", "Arbitrary config file")
-	clientcsrfile = flag.String("clientcsrfile", "ca_scratchpad/certs/softhsm-client.csr", "Arbitrary config file")
+	csrFile  = flag.String("csrFile", "ca_scratchpad/certs/softhsm-server.csr", "CSR File to write to")
+	sni      = flag.String("sni", "server.domain.com", "SNI value")
+	keyLabel = flag.String("keyLabel", "keylabel1", "KeyLabel for the PKCS object")
 )
 
 const ()
@@ -60,7 +61,7 @@ func main() {
 	defer ctx.Close()
 
 	// softhsm
-	priv, err := ctx.FindKeyPair(nil, []byte("keylabel1"))
+	priv, err := ctx.FindKeyPair(nil, []byte(*keyLabel))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -121,9 +122,9 @@ func main() {
 			Locality:           []string{"Mountain View"},
 			Province:           []string{"California"},
 			Country:            []string{"US"},
-			CommonName:         "pkcs.domain.com",
+			CommonName:         *sni,
 		},
-		DNSNames: []string{"pkcs.domain.com"},
+		DNSNames: []string{*sni},
 	}
 
 	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &csrtemplate, priv)
@@ -139,7 +140,7 @@ func main() {
 	)
 	log.Printf("CSR \n%s\n", string(pemdata))
 
-	f1, err := os.Create(*servercsrfile)
+	f1, err := os.Create(*csrFile)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -151,16 +152,4 @@ func main() {
 		return
 	}
 	defer f1.Close()
-	f2, err := os.Create(*clientcsrfile)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	_, err = f2.WriteString(string(pemdata))
-	if err != nil {
-		fmt.Println(err)
-		f2.Close()
-		return
-	}
-	defer f2.Close()
 }

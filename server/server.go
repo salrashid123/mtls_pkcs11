@@ -4,9 +4,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/ThalesIgnite/crypto11"
@@ -59,7 +59,10 @@ func main() {
 
 	defer ctx.Close()
 
-	clientCaCert, err := ioutil.ReadFile("ca_scratchpad/ca/root-ca.crt")
+	clientCaCert, err := os.ReadFile("ca_scratchpad/ca/root-ca.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
 	clientCaCertPool := x509.NewCertPool()
 	clientCaCertPool.AppendCertsFromPEM(clientCaCert)
 

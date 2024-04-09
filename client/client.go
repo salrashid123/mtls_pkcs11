@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/ThalesIgnite/crypto11"
 	salpkcs "github.com/salrashid123/mtls_pkcs11/signer/pkcs"
@@ -55,14 +56,17 @@ func main() {
 
 	defer ctx.Close()
 
-	clientCaCert, err := ioutil.ReadFile("ca_scratchpad/ca/root-ca.crt")
+	clientCaCert, err := os.ReadFile("ca_scratchpad/ca/root-ca.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
 	clientCaCertPool := x509.NewCertPool()
 	clientCaCertPool.AppendCertsFromPEM(clientCaCert)
 
 	r, err := salpkcs.NewPKCSCrypto(&salpkcs.PKCS{
 		Context:        ctx,
 		PkcsId:         nil,                                      //softhsm
-		PkcsLabel:      []byte("keylabel1"),                      //softhsm
+		PkcsLabel:      []byte("keylabel2"),                      //softhsm
 		PublicCertFile: "ca_scratchpad/certs/softhsm-client.crt", //softhsm
 
 		// PkcsId:    []byte{1}, //yubikey
@@ -76,7 +80,7 @@ func main() {
 
 		ExtTLSConfig: &tls.Config{
 			RootCAs:    clientCaCertPool,
-			ServerName: "pkcs.domain.com",
+			ServerName: "server.domain.com",
 		},
 	})
 	if err != nil {
