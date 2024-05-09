@@ -7,7 +7,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"sync"
 
 	"github.com/ThalesIgnite/crypto11"
@@ -63,12 +63,12 @@ func NewPKCSCrypto(conf *PKCS) (PKCS, error) {
 		if err != nil {
 			return PKCS{}, fmt.Errorf("Could not retrieve x509 Certificate from PKCS config;  please specify PublicCertFile")
 		}
-		if crt == nil {
-			return PKCS{}, fmt.Errorf("Could not retrieve x509 Certificate from PKCS config;  please specify PublicCertFile")
-		}
+		// if crt == nil {
+		// 	return PKCS{}, fmt.Errorf("Could not retrieve x509 Certificate from PKCS config;  please specify PublicCertFile")
+		// }
 		conf.pcert = crt
 	} else {
-		pubPEM, err := ioutil.ReadFile(conf.PublicCertFile)
+		pubPEM, err := os.ReadFile(conf.PublicCertFile)
 		if err != nil {
 			return PKCS{}, fmt.Errorf("Unable to read keys %v", err)
 		}
