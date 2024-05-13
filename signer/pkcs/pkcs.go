@@ -24,8 +24,7 @@ var (
 )
 
 type PKCS struct {
-	priv         crypto.Signer
-	ExtTLSConfig *tls.Config
+	priv crypto.Signer
 
 	PublicCertFile string
 	pcert          *x509.Certificate
@@ -39,15 +38,6 @@ type PKCS struct {
 func NewPKCSCrypto(conf *PKCS) (PKCS, error) {
 	pkcsContext = conf.Context
 
-	if conf.ExtTLSConfig != nil {
-		if len(conf.ExtTLSConfig.Certificates) > 0 {
-			return PKCS{}, fmt.Errorf("Certificates value in ExtTLSConfig Ignored")
-		}
-
-		if len(conf.ExtTLSConfig.CipherSuites) > 0 {
-			return PKCS{}, fmt.Errorf("CipherSuites value in ExtTLSConfig Ignored")
-		}
-	}
 	var err error
 	conf.priv, err = conf.Context.FindKeyPair(conf.PkcsId, conf.PkcsLabel)
 	if err != nil {
@@ -86,7 +76,6 @@ func NewPKCSCrypto(conf *PKCS) (PKCS, error) {
 	return PKCS{
 		refreshMutex: &sync.Mutex{}, // guards impersonatedToken; held while fetching or updating it.
 		priv:         conf.priv,
-		ExtTLSConfig: conf.ExtTLSConfig,
 		pcert:        conf.pcert,
 		PkcsId:       conf.PkcsId,
 		PkcsLabel:    conf.PkcsLabel,
@@ -116,20 +105,5 @@ func (t PKCS) TLSCertificate() tls.Certificate {
 		PrivateKey:  privKey,
 		Leaf:        &x509Certificate,
 		Certificate: [][]byte{x509Certificate.Raw},
-	}
-}
-
-func (t PKCS) TLSConfig() *tls.Config {
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{t.TLSCertificate()},
-
-		RootCAs:      t.ExtTLSConfig.RootCAs,
-		ClientCAs:    t.ExtTLSConfig.ClientCAs,
-		ClientAuth:   t.ExtTLSConfig.ClientAuth,
-		ServerName:   t.ExtTLSConfig.ServerName,
-		CipherSuites: t.ExtTLSConfig.CipherSuites,
-		MaxVersion:   t.ExtTLSConfig.MaxVersion,
-		MinVersion:   t.ExtTLSConfig.MinVersion,
 	}
 }

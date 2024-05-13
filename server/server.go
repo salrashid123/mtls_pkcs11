@@ -79,11 +79,6 @@ func main() {
 		// PkcsId: []byte{0}, //tpm
 		// // PkcsLabel:      []byte("keylabel1"),  //tpm https://github.com/ThalesIgnite/crypto11/issues/82
 		// PublicCertFile: "certs/tpm-server.crt", //tpm
-		ExtTLSConfig: &tls.Config{
-			RootCAs:    clientCaCertPool,
-			ClientCAs:  clientCaCertPool,
-			ClientAuth: tls.RequireAndVerifyClientCert,
-		},
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -92,8 +87,13 @@ func main() {
 
 	var server *http.Server
 	server = &http.Server{
-		Addr:      ":8081",
-		TLSConfig: r.TLSConfig(),
+		Addr: ":8081",
+		TLSConfig: &tls.Config{
+			RootCAs:      clientCaCertPool,
+			ClientCAs:    clientCaCertPool,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			Certificates: []tls.Certificate{r.TLSCertificate()},
+		},
 	}
 	http2.ConfigureServer(server, &http2.Server{})
 	log.Println("Starting Server..")

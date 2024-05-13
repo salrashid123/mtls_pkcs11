@@ -77,17 +77,16 @@ func main() {
 		// PkcsId: []byte{0}, //tpm
 		// // PkcsLabel:      []byte("keylabel1"),  //tpm https://github.com/ThalesIgnite/crypto11/issues/82
 		// PublicCertFile: "certs/tpm-client.crt", //tpm
-
-		ExtTLSConfig: &tls.Config{
-			RootCAs:    clientCaCertPool,
-			ServerName: "server.domain.com",
-		},
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	tr := &http.Transport{
-		TLSClientConfig: r.TLSConfig(),
+		TLSClientConfig: &tls.Config{
+			RootCAs:      clientCaCertPool,
+			ServerName:   "server.domain.com",
+			Certificates: []tls.Certificate{r.TLSCertificate()},
+		},
 	}
 	client := &http.Client{Transport: tr}
 
