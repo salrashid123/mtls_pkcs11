@@ -16,11 +16,10 @@ import (
 const ()
 
 var (
-	x509Certificate x509.Certificate
-	publicKey       crypto.PublicKey
-	clientCAs       *x509.CertPool
-	clientAuth      *tls.ClientAuthType
-	pkcsContext     *crypto11.Context
+	publicKey   crypto.PublicKey
+	clientCAs   *x509.CertPool
+	clientAuth  *tls.ClientAuthType
+	pkcsContext *crypto11.Context
 )
 
 type PKCS struct {
@@ -98,12 +97,9 @@ func (t PKCS) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byt
 
 func (t PKCS) TLSCertificate() tls.Certificate {
 
-	x509Certificate = *t.pcert
-	var privKey crypto.PrivateKey = t
-
 	return tls.Certificate{
-		PrivateKey:  privKey,
-		Leaf:        &x509Certificate,
-		Certificate: [][]byte{x509Certificate.Raw},
+		PrivateKey:  t,
+		Leaf:        t.pcert,
+		Certificate: [][]byte{t.pcert.Raw},
 	}
 }

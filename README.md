@@ -45,7 +45,7 @@ On debian
 
 # then
 $ export DEBIAN_FRONTEND=noninteractive 
-$ apt-get update && apt-get install libtpm2-pkcs11-1 tpm2-tools libengine-pkcs11-openssl opensc -y
+$ apt-get update && apt-get install libtpm2-pkcs11-1 tpm2-tools libengine-pkcs11-openssl opensc softhsm2 libsofthsm2 -y
 ```
 
 Note, the installation above adds in the libraries for all modules in this repo (TPM, OpenSC, etc)..you may only need `libengine-pkcs11-openssl` here to verify
@@ -127,7 +127,7 @@ openssl engine dynamic \
 Use [pkcs11-too](https://manpages.debian.org/testing/opensc/pkcs11-tool.1.en.html) which comes with the installation of opensc
 
 ```bash
-export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
+export SOFTHSM2_CONF=/absolute/path/to/mtls_pkcs11/misc/softhsm.conf
 rm -rf /tmp/tokens
 mkdir /tmp/tokens
 
@@ -136,21 +136,21 @@ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --label="
 
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so --list-token-slots
         Available slots:
-        Slot 0 (0x1ce44146): SoftHSM slot ID 0x1ce44146
+        Slot 0 (0x2593104d): SoftHSM slot ID 0x2593104d
           token label        : token1
           token manufacturer : SoftHSM project
           token model        : SoftHSM v2
           token flags        : login required, rng, token initialized, PIN initialized, other flags=0x20
           hardware version   : 2.6
           firmware version   : 2.6
-          serial num         : 5acf7a051ce44146
+          serial num         : 2c6106832593104d
           pin min/max        : 4/255
         Slot 1 (0x1): SoftHSM slot ID 0x1
           token state:   uninitialized
 
 
 
-### >>> Important NOTE the serial num   5acf7a051ce44146  
+### >>> Important NOTE the serial num   2c6106832593104d  
 ## we will use this in the PKCS-11 URI
 
 # Create Server's private key as id=4142, keylabel1;  client as id=4143, keylabel2
@@ -158,40 +158,27 @@ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so -l -k --ke
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so -l -k --key-type rsa:2048 --id 4143 --label keylabel2 --pin mynewpin
 
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --list-objects
-    Using slot 0 with a present token (0x1ce44146)
-    Public Key Object; RSA 2048 bits
-      label:      keylabel2
-      ID:         4143
-      Usage:      encrypt, verify, verifyRecover, wrap
-      Access:     local
-    Public Key Object; RSA 2048 bits
-      label:      keylabel1
-      ID:         4142
-      Usage:      encrypt, verify, verifyRecover, wrap
-      Access:     local
 
-### use key to generate random bytes
-
-pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --label="keylabel1" --pin mynewpin --generate-random 50 | xxd -p
-
+## get the serial number from the previous --list-token-slots command
+export serial_number="2c6106832593104d"
 ### Use openssl module to sign and print the public key (not, your serial number will be different)
 # server
-export PKCS11_SERVER_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=5acf7a051ce44146;token=token1;type=private;object=keylabel1?pin-value=mynewpin"
-export PKCS11_SERVER_PUBLIC_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=5acf7a051ce44146;token=token1;type=public;object=keylabel1?pin-value=mynewpin"
+export PKCS11_SERVER_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=$serial_number;token=token1;type=private;object=keylabel1?pin-value=mynewpin"
+export PKCS11_SERVER_PUBLIC_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=$serial_number;token=token1;type=public;object=keylabel1?pin-value=mynewpin"
 
 # client
-export PKCS11_CLIENT_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=5acf7a051ce44146;token=token1;type=private;object=keylabel2?pin-value=mynewpin"
-export PKCS11_CLIENT_PUBLIC_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=5acf7a051ce44146;token=token1;type=public;object=keylabel2?pin-value=mynewpin"
+export PKCS11_CLIENT_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=$serial_number;token=token1;type=private;object=keylabel2?pin-value=mynewpin"
+export PKCS11_CLIENT_PUBLIC_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=$serial_number;token=token1;type=public;object=keylabel2?pin-value=mynewpin"
+
+### Display the public keys
+openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_SERVER_PUBLIC_KEY" -pubout
+openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_CLIENT_PUBLIC_KEY" -pubout
 
 ### Sign and verify
 echo "sig data" > "data.txt"
 openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_SERVER_PUBLIC_KEY" -pubout -out pub.pem
 openssl pkeyutl -engine pkcs11 -keyform engine -inkey $PKCS11_SERVER_PRIVATE_KEY -sign -in data.txt -out data.sig
 openssl pkeyutl -pubin -inkey pub.pem -verify -in data.txt -sigfile data.sig
-
-### Display the public keys
-openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_SERVER_PUBLIC_KEY" -pubout
-openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_CLIENT_PUBLIC_KEY" -pubout
 ```
 
 #### Generate mTLS certs
@@ -248,7 +235,7 @@ export NAME=softhsm-client
 openssl x509 -in certs/$NAME.crt -out certs/$NAME.der -outform DER
 pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so -l --id 4143 --label keylabel2 -y cert -w certs/$NAME.der --pin mynewpin
 
-
+## list the objects..you sould now see certificates too
 $ pkcs11-tool --module /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so  --list-objects
 
       Using slot 0 with a present token (0x1ce44146)
@@ -338,10 +325,6 @@ go run client/client.go
 To use curl for client certs, you can use the `--engine` directive and specify that the private key referenced to by the `PKCS11_PRIVATE_KEY` uri
 
 ```bash
-export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
-export PKCS11_CLIENT_PRIVATE_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=5acf7a051ce44146;token=token1;type=private;object=keylabel2?pin-value=mynewpin"
-export PKCS11_CLIENT_PUBLIC_KEY="pkcs11:model=SoftHSM%20v2;manufacturer=SoftHSM%20project;serial=5acf7a051ce44146;token=token1;type=public;object=keylabel2?pin-value=mynewpin"
-
 curl -vvv -tls13  --cacert ca_scratchpad/ca/root-ca.crt \
    --cert ca_scratchpad/certs/softhsm-client.crt  --engine pkcs11  --key-type ENG --key "$PKCS11_CLIENT_PRIVATE_KEY"  \
    --resolve server.domain.com:8081:127.0.0.1   -H "host: server.domain.com" \
