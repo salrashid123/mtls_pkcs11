@@ -13,7 +13,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/ThalesIgnite/crypto11"
+	"github.com/ThalesGroup/crypto11"
 )
 
 var (

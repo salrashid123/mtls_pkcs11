@@ -3,14 +3,15 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 
-	"github.com/ThalesIgnite/crypto11"
-	salpkcs "github.com/salrashid123/mtls_pkcs11/signer/pkcs"
+	"github.com/ThalesGroup/crypto11"
+	"github.com/salrashid123/pkcssigner"
 )
 
 var ()
@@ -63,29 +64,48 @@ func main() {
 	clientCaCertPool := x509.NewCertPool()
 	clientCaCertPool.AppendCertsFromPEM(clientCaCert)
 
-	r, err := salpkcs.NewPKCSCrypto(&salpkcs.PKCS{
-		Context:        ctx,
-		PkcsId:         nil,                                      //softhsm
-		PkcsLabel:      []byte("keylabel2"),                      //softhsm
-		PublicCertFile: "ca_scratchpad/certs/softhsm-client.crt", //softhsm
+	pubPEMData, err := os.ReadFile("ca_scratchpad/certs/softhsm-client.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	block, _ := pem.Decode(pubPEMData)
+	if err != nil {
+		log.Fatal(err)
+	}
+	filex509, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	r, err := pkcssigner.NewPKCSCrypto(&pkcssigner.PKCS{
+		Context:         ctx,
+		PkcsId:          nil,                 //softhsm
+		PkcsLabel:       []byte("keylabel2"), //softhsm
+		X509Certificate: filex509,            //softhsm
 
 		// PkcsId:    []byte{1}, //yubikey
 		// PkcsLabel: nil,       //yubikey
-		// PublicCertFile: "certs/yubikey-client.crt", //yubikey or omit if PKCS device has cert already
+		// X509Certificate: filex509, //yubikey or omit if PKCS device has cert already
 
 		// PkcsId:         nil,                  //tpm
 		// PkcsId: []byte{0}, //tpm
 		// // PkcsLabel:      []byte("keylabel1"),  //tpm https://github.com/ThalesIgnite/crypto11/issues/82
-		// PublicCertFile: "certs/tpm-client.crt", //tpm
+		// X509Certificate: filex509, //tpm
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	tcert, err := r.TLSCertificate()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			RootCAs:      clientCaCertPool,
 			ServerName:   "server.domain.com",
-			Certificates: []tls.Certificate{r.TLSCertificate()},
+			Certificates: []tls.Certificate{tcert},
 		},
 	}
 	client := &http.Client{Transport: tr}

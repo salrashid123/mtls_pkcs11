@@ -3,14 +3,15 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 
-	"github.com/ThalesIgnite/crypto11"
-	salpkcs "github.com/salrashid123/mtls_pkcs11/signer/pkcs"
+	"github.com/ThalesGroup/crypto11"
+	"github.com/salrashid123/pkcssigner"
 	"golang.org/x/net/http2"
 )
 
@@ -66,20 +67,37 @@ func main() {
 	clientCaCertPool := x509.NewCertPool()
 	clientCaCertPool.AppendCertsFromPEM(clientCaCert)
 
-	r, err := salpkcs.NewPKCSCrypto(&salpkcs.PKCS{
-		Context:        ctx,
-		PkcsId:         nil,                                      //softhsm
-		PkcsLabel:      []byte("keylabel1"),                      //softhsm
-		PublicCertFile: "ca_scratchpad/certs/softhsm-server.crt", //softhsm
+	pubPEMData, err := os.ReadFile("ca_scratchpad/certs/softhsm-server.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	block, _ := pem.Decode(pubPEMData)
+	if err != nil {
+		log.Fatal(err)
+	}
+	filex509, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		log.Fatal(err)
+	}
+	r, err := pkcssigner.NewPKCSCrypto(&pkcssigner.PKCS{
+		Context:         ctx,
+		PkcsId:          nil,                 //softhsm
+		PkcsLabel:       []byte("keylabel1"), //softhsm
+		X509Certificate: filex509,            //softhsm
 
 		// PkcsId:         []byte{1},                  //yubikey
 		// PkcsLabel:      nil,                        //yubikey
-		// PublicCertFile: "certs/yubikey-server.crt", //yubikey
+		// X509Certificate: filex509, //yubikey
 
 		// PkcsId: []byte{0}, //tpm
 		// // PkcsLabel:      []byte("keylabel1"),  //tpm https://github.com/ThalesIgnite/crypto11/issues/82
-		// PublicCertFile: "certs/tpm-server.crt", //tpm
+		// X509Certificate: filex509, //tpm
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tcert, err := r.TLSCertificate()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -92,7 +110,7 @@ func main() {
 			RootCAs:      clientCaCertPool,
 			ClientCAs:    clientCaCertPool,
 			ClientAuth:   tls.RequireAndVerifyClientCert,
-			Certificates: []tls.Certificate{r.TLSCertificate()},
+			Certificates: []tls.Certificate{tcert},
 		},
 	}
 	http2.ConfigureServer(server, &http2.Server{})

@@ -79,6 +79,7 @@ dynamic_path = /usr/lib/x86_64-linux-gnu/engines-3/libpkcs11.so
 
 
 ```bash
+# PKCS11_PROVIDER_DEBUG=file:/tmp/p11prov-debug.log,level=5
 $ openssl engine
   (rdrand) Intel RDRAND engine
   (dynamic) Dynamic engine loading support
@@ -175,10 +176,10 @@ openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_SERVER_PUBLIC_KEY" -pubo
 openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_CLIENT_PUBLIC_KEY" -pubout
 
 ### Sign and verify
-echo "sig data" > "data.txt"
-openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_SERVER_PUBLIC_KEY" -pubout -out pub.pem
-openssl pkeyutl -engine pkcs11 -keyform engine -inkey $PKCS11_SERVER_PRIVATE_KEY -sign -in data.txt -out data.sig
-openssl pkeyutl -pubin -inkey pub.pem -verify -in data.txt -sigfile data.sig
+echo "sig data" > /tmp/data.txt
+openssl rsa -engine pkcs11  -inform engine -in "$PKCS11_SERVER_PUBLIC_KEY" -pubout -out /tmp/pub.pem
+openssl pkeyutl -engine pkcs11 -keyform engine  -inkey $PKCS11_SERVER_PRIVATE_KEY -sign -in /tmp/data.txt -out /tmp/data.sig
+openssl pkeyutl -pubin -inkey /tmp/pub.pem -verify -in /tmp/data.txt -sigfile /tmp/data.sig
 ```
 
 #### Generate mTLS certs
@@ -273,7 +274,7 @@ For softHSM Server:
 
 ```golang
 import (
-  salpkcs "github.com/salrashid123/mtls_pkcs11/signer/pkcs"
+  salpkcs "github.com/salrashid123/pkcssigner"
 )
 
 	// export SOFTHSM2_CONF=/absolute/path/to/pkcs11_signer/misc/softhsm.conf
@@ -287,7 +288,7 @@ import (
 	clientCaCertPool := x509.NewCertPool()
 	clientCaCertPool.AppendCertsFromPEM(clientCaCert)
 
-	r, err := salpkcs.NewPKCSCrypto(&salpkcs.PKCS{
+	r, err := pkcssigner.NewPKCSCrypto(&pkcssigner.PKCS{
 		Context:        ctx,
 		PkcsId:         nil,                                      //softhsm
 		PkcsLabel:      []byte("keylabel1"),                      //softhsm
